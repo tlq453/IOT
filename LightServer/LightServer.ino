@@ -25,8 +25,6 @@
 #define LED_PIN GPIO_NUM_10  
 
 // Global variables
-static float tempC = 25.0;
-static float vBatt = 5.0;
 static bool LedState = false;
 
 // BLE Variables
@@ -42,7 +40,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             ESP_LOGI(TAG, "Registering service...");
             esp_ble_gatts_create_attr_tab(ble_handle_table, gatts_if, 3, 0);
             break;
-
+        
         case ESP_GATTS_WRITE_EVT:
             if (param->write.handle == ble_handle_table[2]) {  // LED Control
                 if (param->write.value[0] == '0') {
@@ -56,7 +54,8 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                 }
             }
             break;
-
+            
+        
         case ESP_GATTS_CONNECT_EVT:
             ESP_LOGI(TAG, "Client Connected!");
             break;
@@ -65,6 +64,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             ESP_LOGI(TAG, "Client Disconnected!");
             esp_ble_gap_start_advertising();
             break;
+          
 
         default:
             break;
@@ -95,7 +95,7 @@ void sensor_task(void *pvParameter) {
     while (1) {
         //Edit the sensor task inside here first
         //Sensor should check for stuff and run the light turning on and off logic
-        
+        Serial.println("Sensor Task Running...");
         
         //ESP_LOGI(TAG, "Temperature: %.2f°C, Battery: %.2fV", tempC, vBatt);
         vTaskDelay(pdMS_TO_TICKS(15000));  // Update every 15 sec
