@@ -93,7 +93,6 @@ void ble_init() {
 // Temperature & Battery Simulation
 void sensor_task(void *pvParameter) {
     while (1) {
-        //Edit the sensor task inside here first
         tempC += (rand() % 2 == 0) ? 0.1 : -0.1;
         vBatt = (vBatt > 1.0) ? vBatt - 0.01 : 5.0;
         

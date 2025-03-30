@@ -1,116 +1,169 @@
-#include <stdio.h>
-#include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "esp_log.h"
-#include "nvs_flash.h"
-#include "esp_bt.h"
-#include "esp_gap_ble_api.h"
-#include "esp_gatt_common_api.h"
-#include "esp_gatts_api.h"
-#include "esp_gatt_defs.h"
-#include "esp_bt_main.h"
-#include "driver/gpio.h"
+#include <BLEDevice.h>
+#include <BLEServer.h>
+//#include <BLEUtils.h>
+//#include <BLE2902.h>
+#include <M5StickCPlus.h>
 
-#define TAG "BLE_SERVER"
+//#include <Wire.h>
 
-// BLE Service UUID
+//Default Temperature in Celsius
+#define temperatureCelsius
+
+//change to unique BLE server name
+#define bleServerName "AAA"
+
+float tempC = 25.0;
+float tempF;
+float vBatt = 5.0;  // initial value
+bool LedState;
+
+// Timer variables
+unsigned long lastTime = 0;
+unsigned long timerDelay = 15000;   // update refresh every 15sec
+
+bool deviceConnected = false;
+
+
+// LED setup
+const int LED_PIN = 10;  
+
+
+// See the following for generating UUIDs:
+// https://www.uuidgenerator.net/
 #define SERVICE_UUID "da1a59b9-1125-4bd4-b72b-d15dc8057c53"
-#define LED_STATE_UUID "22222222-2222-2222-2222-222222222222"
-#define LED_NAME_UUID "11111111-1111-1111-1111-111111111111"
 
 
-// LED Pin
-#define LED_PIN GPIO_NUM_10  
+// Temperature Characteristic and Descriptor
+#ifdef temperatureCelsius
+    BLECharacteristic imuTemperatureCelsiusCharacteristics("c10aa881-8c74-4146-bc26-4834ffb2ce5f", BLECharacteristic::PROPERTY_NOTIFY);
+    BLEDescriptor imuTemperatureCelsiusDescriptor(BLEUUID((uint16_t)0x2902));
+#else
+    BLECharacteristic imuTemperatureFahrenheitCharacteristics("44a8e759-5c4b-486d-917d-fec6454540e3", BLECharacteristic::PROPERTY_NOTIFY);
+    BLEDescriptor imuTemperatureFahrenheitDescriptor(BLEUUID((uint16_t)0x2902));
+#endif
 
-// Global variables
-static float tempC = 25.0;
-static float vBatt = 5.0;
-static bool LedState = false;
+// Battery Voltage Characteristic and Descriptor
+BLECharacteristic axpVoltageCharacteristics("01234567-0123-4567-89ab-0123456789ef", BLECharacteristic::PROPERTY_NOTIFY);
+BLEDescriptor axpVoltageDescriptor(BLEUUID((uint16_t)0x2903));
 
-// BLE Variables
-static esp_gatt_char_prop_t char_property = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
-static uint16_t ble_handle_table[3];  // Stores handles for temp, battery, LED
-static esp_gatt_if_t server_if;
+// LED characteristic for users to access this service
+BLECharacteristic ledCharacteristic("28ecdcde-5541-4db2-982c-91bde176da5d", BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+BLEDescriptor ledDescriptor(BLEUUID((uint16_t)0x2901));
 
-// BLE Callback Functions
-static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
-                                        esp_ble_gatts_cb_param_t *param) {
-    switch (event) {
-        case ESP_GATTS_REG_EVT:
-            ESP_LOGI(TAG, "Registering service...");
-            esp_ble_gatts_create_attr_tab(ble_handle_table, gatts_if, 3, 0);
-            break;
 
-        case ESP_GATTS_WRITE_EVT:
-            if (param->write.handle == ble_handle_table[2]) {  // LED Control
-                if (param->write.value[0] == '0') {
-                    LedState = true;
-                    gpio_set_level(LED_PIN, 0);
-                    ESP_LOGI(TAG, "LED ON");
-                } else if (param->write.value[0] == '1') {
-                    LedState = false;
-                    gpio_set_level(LED_PIN, 1);
-                    ESP_LOGI(TAG, "LED OFF");
-                }
-            }
-            break;
-
-        case ESP_GATTS_CONNECT_EVT:
-            ESP_LOGI(TAG, "Client Connected!");
-            break;
-
-        case ESP_GATTS_DISCONNECT_EVT:
-            ESP_LOGI(TAG, "Client Disconnected!");
-            esp_ble_gap_start_advertising();
-            break;
-
-        default:
-            break;
+//Setup callbacks onConnect and onDisconnect
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+        deviceConnected = true;
+        Serial.println("Connected to Client");
+        Serial.println("MyServerCallbacks:;:Connected...");
+    };
+    void onDisconnect(BLEServer* pServer) {
+        deviceConnected = false;
+        BLEDevice::startAdvertising();
+        M5.Lcd.printf("Advertising restarted");
+        M5.Lcd.printf("MyServerCallbacks::Disconnected...");
     }
-}
+};
 
-// BLE Initialization
-void ble_init() {
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
+class LEDCharacteristicCallbacks : public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+        std::string value = pCharacteristic->getValue();
+        if (value.length() > 0) {
+        if (value[0] == '0') {
+            LedState = true;
+            digitalWrite(LED_PIN, LOW); // Turn on LED
+            Serial.println("LED turned on by client");
+        } else if (value[0] == '1') {
+            LedState = false;
+            digitalWrite(LED_PIN, HIGH); // Turn off LED
+            Serial.println("LED turned off by client");
+        } else {
+            Serial.println("Unexpected value for LED data.");
+        }
+        }
     }
-    ESP_ERROR_CHECK(ret);
+};
 
-    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_bt_controller_init(&bt_cfg));
-    ESP_ERROR_CHECK(esp_bt_controller_enable(ESP_BT_MODE_BLE));
-    ESP_ERROR_CHECK(esp_bluedroid_init());
-    ESP_ERROR_CHECK(esp_bluedroid_enable());
 
-    esp_ble_gatts_register_callback(gatts_profile_event_handler);
-    esp_ble_gatts_app_register(0);
-}
+void setup() {
+    // Start serial communication 
+    Serial.begin(115200);
 
-// Temperature & Battery Simulation
-void sensor_task(void *pvParameter) {
-    while (1) {
-        //Edit the sensor task inside here first
-        //Sensor should check for stuff and run the light turning on and off logic
+    // put your setup code here, to run once:
+    M5.begin();
+    M5.Lcd.setRotation(3);
+    M5.Lcd.fillScreen(BLACK);
+    M5.Lcd.setCursor(0, 0, 2);
+    M5.Lcd.printf("BLE Server", 0);
+
+    //Config the Button m5_button_home
+    pinMode(M5_BUTTON_HOME, INPUT);
+
+    //setup LED
+    pinMode(LED_PIN,OUTPUT);
+    digitalWrite(LED_PIN, HIGH); // Turn off LED initially
+
+
+    // Create the BLE Device
+    BLEDevice::init(bleServerName);
+    Serial.println("BLE Device initialized\n");
+
+    // Create the BLE Server
+    BLEServer *pServer = BLEDevice::createServer();
+    pServer->setCallbacks(new MyServerCallbacks());
+    Serial.println("BLE Server created\n");
+
+    // Create the BLE Service
+    BLEService *bleService = pServer->createService(SERVICE_UUID);
+    Serial.println("BLE Service created\n");
+
+    // Create BLE Characteristics and Create a BLE Descriptor
+    // Temperature
+    #ifdef temperatureCelsius
+        bleService->addCharacteristic(&imuTemperatureCelsiusCharacteristics);
+        imuTemperatureCelsiusDescriptor.setValue("IMU Temperature(C)");
+        imuTemperatureCelsiusCharacteristics.addDescriptor(&imuTemperatureCelsiusDescriptor);
+    #else
+        bleService->addCharacteristic(&imuTemperatureFahrenheitCharacteristics);
+        imuTemperatureFahrenheitDescriptor.setValue("IMU Temperature(F)");
+        imuTemperatureFahrenheitCharacteristics.addDescriptor(&imuTemperatureFahrenheitDescriptor);
+    #endif  
+
+    // Battery
+    bleService->addCharacteristic(&axpVoltageCharacteristics);
+    axpVoltageDescriptor.setValue("AXP Battery(V)");
+    axpVoltageCharacteristics.addDescriptor(&axpVoltageDescriptor); 
+
+    //Add LED charcteristic to the service
+    bleService->addCharacteristic(&ledCharacteristic);
+    ledDescriptor.setValue("LED State");
+    ledCharacteristic.addDescriptor(&ledDescriptor);
+    ledCharacteristic.setCallbacks(new LEDCharacteristicCallbacks()); // Register the callback
+
         
-        
-        //ESP_LOGI(TAG, "Temperature: %.2f°C, Battery: %.2fV", tempC, vBatt);
-        vTaskDelay(pdMS_TO_TICKS(15000));  // Update every 15 sec
-    }
+    // Start the service
+    bleService->start();
+    Serial.println("BLE Service started\n");
+
+    // Start advertising
+    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pServer->getAdvertising()->start();
+    Serial.println("Waiting a client connection to notify...");
 }
 
-void app_main() {
-    ESP_LOGI(TAG, "Starting BLE Server...");
+void loop() {
 
-    // Initialize BLE
-    ble_init();
+    Serial.println("Server is up");
+    delay(2000);
+    m5.update();
+    if (deviceConnected) {
+        //Do some code when server is connected
+        Serial.println("Device is connected to the server");
 
-    // Configure LED GPIO
-    
 
-    // Start Sensor Task
-    xTaskCreate(&sensor_task, "sensor_task", 2048, NULL, 5, NULL);
+
+
+  }
 }
