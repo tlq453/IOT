@@ -17,9 +17,9 @@
 
 // BLE Service UUID
 #define SERVICE_UUID   "da1a59b9-1125-4bd4-b72b-d15dc8057c53"
-#define CHAR_TEMP_UUID "c10aa881-8c74-4146-bc26-4834ffb2ce5f"
-#define CHAR_BATT_UUID "01234567-0123-4567-89ab-0123456789ef"
-#define CHAR_LED_UUID  "28ecdcde-5541-4db2-982c-91bde176da5d"
+#define LED_STATE_UUID"22222222-2222-2222-2222-222222222222"
+#define LED_NAME_UUID "11111111-1111-1111-1111-111111111111"
+
 
 // LED Pin
 #define LED_PIN GPIO_NUM_10  
@@ -94,10 +94,10 @@ void ble_init() {
 void sensor_task(void *pvParameter) {
     while (1) {
         //Edit the sensor task inside here first
-        tempC += (rand() % 2 == 0) ? 0.1 : -0.1;
-        vBatt = (vBatt > 1.0) ? vBatt - 0.01 : 5.0;
+        //Sensor should check for stuff and run the light turning on and off logic
         
-        ESP_LOGI(TAG, "Temperature: %.2f°C, Battery: %.2fV", tempC, vBatt);
+        
+        //ESP_LOGI(TAG, "Temperature: %.2f°C, Battery: %.2fV", tempC, vBatt);
         vTaskDelay(pdMS_TO_TICKS(15000));  // Update every 15 sec
     }
 }
@@ -109,9 +109,7 @@ void app_main() {
     ble_init();
 
     // Configure LED GPIO
-    gpio_reset_pin(LED_PIN);
-    gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(LED_PIN, 1);  // LED off
+    
 
     // Start Sensor Task
     xTaskCreate(&sensor_task, "sensor_task", 2048, NULL, 5, NULL);
