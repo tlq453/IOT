@@ -32,7 +32,7 @@ async def handle_device(device):
 async def main():
     while True:
         
-        '''
+        #'''
         print("🔍 Scanning for LightNodes...")
         devices = await BleakScanner.discover(timeout=5.0)
 
@@ -40,7 +40,7 @@ async def main():
             print(f"Found: {d.name} ({d.address}) - {d.metadata}")
         
         
-        '''    
+        '''  
         print("🔍 Scanning for LightNodes...")
         devices = await BleakScanner.discover(timeout=5.0)
 
@@ -59,7 +59,7 @@ async def main():
 
         print("⏳ Waiting before next scan...\n")
         await asyncio.sleep(10)  # Delay between scans
-        #'''
+        '''
 
 if __name__ == "__main__":
     asyncio.run(main())

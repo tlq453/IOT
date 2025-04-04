@@ -1,169 +1,152 @@
+#include <M5StickCPlus.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
-//#include <BLEUtils.h>
-//#include <BLE2902.h>
-#include <M5StickCPlus.h>
 
-//#include <Wire.h>
+// ====== Pin and BLE Definitions ======
+#define LED_PIN 25
+#define PIR_PIN 26
+#define BLE_SERVER_NAME "LightNode1"
 
-//Default Temperature in Celsius
-#define temperatureCelsius
+#define SERVICE_UUID       "da1a59b9-1125-4bd4-b72b-d15dc8057c53"
+#define LIGHT_NAME_UUID    "11111111-1111-1111-1111-111111111111"
+#define LIGHT_STATE_UUID   "22222222-2222-2222-2222-222222222222"
+#define PROTOCOL_UUID      "33333333-3333-3333-3333-333333333333"
 
-//change to unique BLE server name
-#define bleServerName "AAA"
+// ====== BLE Characteristics ======
+BLECharacteristic lightNameChar(LIGHT_NAME_UUID, BLECharacteristic::PROPERTY_READ);
+BLECharacteristic lightStateChar(LIGHT_STATE_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+BLECharacteristic protocolChar(PROTOCOL_UUID, BLECharacteristic::PROPERTY_READ);
 
-float tempC = 25.0;
-float tempF;
-float vBatt = 5.0;  // initial value
-bool LedState;
-
-// Timer variables
-unsigned long lastTime = 0;
-unsigned long timerDelay = 15000;   // update refresh every 15sec
-
+BLEServer* pServer = nullptr;
 bool deviceConnected = false;
 
+// ====== Timing Variables ======
+unsigned long lastMotionCheck = 0;
+unsigned long motionCheckInterval = 1000; // Default: 1 second
+unsigned long ledOffTime = 0;
 
-// LED setup
-const int LED_PIN = 10;  
+// ====== LED State Logic ======
+void turnOnLED() {
+  digitalWrite(LED_PIN, HIGH); // Turn ON (assuming active HIGH)
+  lightStateChar.setValue("1");
+  if (deviceConnected) lightStateChar.notify();
+  Serial.println("LED turned ON");
+  ledOffTime = millis() + 5 * 1000; // Schedule auto-off in 5 minutes
+  motionCheckInterval = 4 * 1000;   // Slow down motion checks
+  M5.Lcd.setCursor(0, 50, 2);
+  M5.Lcd.fillRect(0, 50, 160, 20, BLACK);
+  M5.Lcd.println("LED IS turned ON");
+}
 
+void turnOffLED() {
+  digitalWrite(LED_PIN, LOW); // Turn OFF
+  lightStateChar.setValue("0");
+  if (deviceConnected) lightStateChar.notify();
+  Serial.println("LED turned OFF");
+  motionCheckInterval = 1000; // Resume 1-second motion polling
+  ledOffTime = 0;
+  M5.Lcd.setCursor(0, 50, 2);
+  M5.Lcd.fillRect(0, 50, 160, 20, BLACK);
+  M5.Lcd.println("LED IS turned off");
+}
 
-// See the following for generating UUIDs:
-// https://www.uuidgenerator.net/
-#define SERVICE_UUID "da1a59b9-1125-4bd4-b72b-d15dc8057c53"
+bool motionDetected() {
+  return digitalRead(PIR_PIN) == HIGH;
+}
 
+// ====== BLE Callbacks ======
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) {
+    deviceConnected = true;
+    M5.Lcd.println("Device Connected");
+    Serial.println("BLE connected");
+  }
 
-// Temperature Characteristic and Descriptor
-#ifdef temperatureCelsius
-    BLECharacteristic imuTemperatureCelsiusCharacteristics("c10aa881-8c74-4146-bc26-4834ffb2ce5f", BLECharacteristic::PROPERTY_NOTIFY);
-    BLEDescriptor imuTemperatureCelsiusDescriptor(BLEUUID((uint16_t)0x2902));
-#else
-    BLECharacteristic imuTemperatureFahrenheitCharacteristics("44a8e759-5c4b-486d-917d-fec6454540e3", BLECharacteristic::PROPERTY_NOTIFY);
-    BLEDescriptor imuTemperatureFahrenheitDescriptor(BLEUUID((uint16_t)0x2902));
-#endif
-
-// Battery Voltage Characteristic and Descriptor
-BLECharacteristic axpVoltageCharacteristics("01234567-0123-4567-89ab-0123456789ef", BLECharacteristic::PROPERTY_NOTIFY);
-BLEDescriptor axpVoltageDescriptor(BLEUUID((uint16_t)0x2903));
-
-// LED characteristic for users to access this service
-BLECharacteristic ledCharacteristic("28ecdcde-5541-4db2-982c-91bde176da5d", BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
-BLEDescriptor ledDescriptor(BLEUUID((uint16_t)0x2901));
-
-
-//Setup callbacks onConnect and onDisconnect
-class MyServerCallbacks: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) {
-        deviceConnected = true;
-        Serial.println("Connected to Client");
-        Serial.println("MyServerCallbacks:;:Connected...");
-    };
-    void onDisconnect(BLEServer* pServer) {
-        deviceConnected = false;
-        BLEDevice::startAdvertising();
-        M5.Lcd.printf("Advertising restarted");
-        M5.Lcd.printf("MyServerCallbacks::Disconnected...");
-    }
+  void onDisconnect(BLEServer* pServer) {
+    deviceConnected = false;
+    Serial.println("BLE disconnected - restarting advertising");
+    BLEDevice::startAdvertising();
+  }
 };
 
 class LEDCharacteristicCallbacks : public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-        std::string value = pCharacteristic->getValue();
-        if (value.length() > 0) {
-        if (value[0] == '0') {
-            LedState = true;
-            digitalWrite(LED_PIN, LOW); // Turn on LED
-            Serial.println("LED turned on by client");
-        } else if (value[0] == '1') {
-            LedState = false;
-            digitalWrite(LED_PIN, HIGH); // Turn off LED
-            Serial.println("LED turned off by client");
-        } else {
-            Serial.println("Unexpected value for LED data.");
-        }
-        }
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+    if (value == "1") {
+      turnOnLED();
+    } else if (value == "0") {
+      turnOffLED();
     }
+  }
 };
 
+// ====== BLE Setup ======
+void setupBLE() {
+  BLEDevice::init(BLE_SERVER_NAME);
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
 
-void setup() {
-    // Start serial communication 
-    Serial.begin(115200);
+  BLEService *service = pServer->createService(SERVICE_UUID);
 
-    // put your setup code here, to run once:
-    M5.begin();
-    M5.Lcd.setRotation(3);
-    M5.Lcd.fillScreen(BLACK);
-    M5.Lcd.setCursor(0, 0, 2);
-    M5.Lcd.printf("BLE Server", 0);
+  lightNameChar.setValue("LightNode A");
+  protocolChar.setValue("BLE");
 
-    //Config the Button m5_button_home
-    pinMode(M5_BUTTON_HOME, INPUT);
+  service->addCharacteristic(&lightNameChar);
+  service->addCharacteristic(&lightStateChar);
+  service->addCharacteristic(&protocolChar);
+  lightStateChar.setCallbacks(new LEDCharacteristicCallbacks());
 
-    //setup LED
-    pinMode(LED_PIN,OUTPUT);
-    digitalWrite(LED_PIN, HIGH); // Turn off LED initially
+  service->start();
 
+  BLEAdvertising *advertising = BLEDevice::getAdvertising();
+  advertising->addServiceUUID(SERVICE_UUID);
+  advertising->start();
 
-    // Create the BLE Device
-    BLEDevice::init(bleServerName);
-    Serial.println("BLE Device initialized\n");
-
-    // Create the BLE Server
-    BLEServer *pServer = BLEDevice::createServer();
-    pServer->setCallbacks(new MyServerCallbacks());
-    Serial.println("BLE Server created\n");
-
-    // Create the BLE Service
-    BLEService *bleService = pServer->createService(SERVICE_UUID);
-    Serial.println("BLE Service created\n");
-
-    // Create BLE Characteristics and Create a BLE Descriptor
-    // Temperature
-    #ifdef temperatureCelsius
-        bleService->addCharacteristic(&imuTemperatureCelsiusCharacteristics);
-        imuTemperatureCelsiusDescriptor.setValue("IMU Temperature(C)");
-        imuTemperatureCelsiusCharacteristics.addDescriptor(&imuTemperatureCelsiusDescriptor);
-    #else
-        bleService->addCharacteristic(&imuTemperatureFahrenheitCharacteristics);
-        imuTemperatureFahrenheitDescriptor.setValue("IMU Temperature(F)");
-        imuTemperatureFahrenheitCharacteristics.addDescriptor(&imuTemperatureFahrenheitDescriptor);
-    #endif  
-
-    // Battery
-    bleService->addCharacteristic(&axpVoltageCharacteristics);
-    axpVoltageDescriptor.setValue("AXP Battery(V)");
-    axpVoltageCharacteristics.addDescriptor(&axpVoltageDescriptor); 
-
-    //Add LED charcteristic to the service
-    bleService->addCharacteristic(&ledCharacteristic);
-    ledDescriptor.setValue("LED State");
-    ledCharacteristic.addDescriptor(&ledDescriptor);
-    ledCharacteristic.setCallbacks(new LEDCharacteristicCallbacks()); // Register the callback
-
-        
-    // Start the service
-    bleService->start();
-    Serial.println("BLE Service started\n");
-
-    // Start advertising
-    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(SERVICE_UUID);
-    pServer->getAdvertising()->start();
-    Serial.println("Waiting a client connection to notify...");
+  Serial.println("BLE advertising started");
 }
 
+// ====== Arduino Setup ======
+void setup() {
+  M5.begin();
+  Serial.begin(115200);
+
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW); // Start with LED OFF
+
+  pinMode(PIR_PIN, INPUT);    // Motion sensor
+  M5.Lcd.setRotation(3);
+  M5.Lcd.fillScreen(BLACK);
+  M5.Lcd.setCursor(0, 0, 2);
+  M5.Lcd.println("Light Node");
+
+  setupBLE();
+}
+
+// ====== Arduino Main Loop ======
 void loop() {
+  unsigned long now = millis();
 
-    Serial.println("Server is up");
-    delay(2000);
-    m5.update();
-    if (deviceConnected) {
-        //Do some code when server is connected
-        Serial.println("Device is connected to the server");
+  if (deviceConnected) {
+    // Motion check
+    if (now - lastMotionCheck >= motionCheckInterval) {
+      lastMotionCheck = now;
 
+      if (motionDetected()) {
+        Serial.println("Motion detected!");
+        turnOnLED(); // This resets the auto-off timer and adjusts interval
+      } else {
+        // If no motion after interval, resume fast polling
+        if (motionCheckInterval > 1000) {
+          motionCheckInterval = 1000;
+          Serial.println("Motion check interval reset to 1s");
+        }
+      }
+    }
 
-
-
+    // Auto turn-off check
+    if (ledOffTime > 0 && now >= ledOffTime) {
+      Serial.println("Auto-off: LED turned OFF after 5 minutes");
+      turnOffLED();
+    }
   }
 }
