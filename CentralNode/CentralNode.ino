@@ -31,7 +31,9 @@ void writeToAdjacentNode(char value) {
   Serial.printf("write to adjacentnode triggered");
   if (StateChar2 != nullptr && client2->isConnected()) {
     std::string val(1, value);  // convert char to string
-    StateChar2->writeValue(val);
+    //StateChar2->writeValue(val,false);
+    StateChar2->getDescriptor(BLEUUID((uint16_t)0x2902))->writeValue((uint8_t*)val.c_str(), val.length(), false);
+
     Serial.printf("➡️ Sent '%c' to AdjacentNode\n", value);
   } else {
     Serial.println("⚠️ Cannot write: AdjacentNode not connected");
@@ -50,7 +52,7 @@ void ledNotifyCallback(BLERemoteCharacteristic* pChar, uint8_t* pData, size_t le
       Serial.printf("🔔 LightNode1 LED is %s\n", status.c_str());
 
       // Forward to AdjacentNode
-      //writeToAdjacentNode(state);
+      writeToAdjacentNode(state);
 
       // Print LightNode1 status (line 1)
       M5.Lcd.setCursor(0, 50, 2);

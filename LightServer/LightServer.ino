@@ -98,6 +98,7 @@ void setupBLE() {
   lightStateChar.setCallbacks(new LEDCharacteristicCallbacks());
 
   service->start();
+  delay(200);
 
   BLEAdvertising *advertising = pServer->getAdvertising();  // <- get from your server
   advertising->addServiceUUID(SERVICE_UUID);
