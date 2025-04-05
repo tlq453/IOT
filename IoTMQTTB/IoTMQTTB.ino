@@ -24,6 +24,9 @@ Adafruit_MQTT_Publish LED_B = Adafruit_MQTT_Publish(&mqtt, "building/rooms/A/LED
 unsigned long lastMotionTime = 0;
 unsigned long led_interval = 300000;
 
+// ledState isSent
+bool isSent = false;
+
 #define MSG_BUFFER_SIZE (50)
 char msg[MSG_BUFFER_SIZE];
 
@@ -54,9 +57,12 @@ void loop() {
 
     unsigned long currentMillis = millis();
     if (currentMillis - lastMotionTime >= led_interval) {
-        digitalWrite(ledPin, 1); // Turn OFF LED
-        snprintf(msg, MSG_BUFFER_SIZE, "OFF");
-        LED_A.publish(msg);
+        if (isSent == false) {
+          digitalWrite(ledPin, 1); // Turn OFF LED
+          snprintf(msg, MSG_BUFFER_SIZE, "OFF");
+          LED_B.publish(msg);
+          isSent = true;
+        }
     }
     
     // Check for incoming messages on "toggle_LED/A"
@@ -70,6 +76,7 @@ void loop() {
           snprintf(msg, MSG_BUFFER_SIZE, "B is ON");
           LED_B.publish(msg);
           M5.Lcd.println("Sent ON");
+          isSent = false;
         }
       }
     }

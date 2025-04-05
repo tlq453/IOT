@@ -26,6 +26,9 @@ bool cooldownMotion = false;
 unsigned long timer_interval = 240000;
 unsigned long led_interval = 300000;
 
+// ledState isSent
+bool isSent = false;
+
 #define MSG_BUFFER_SIZE (50)
 char msg[MSG_BUFFER_SIZE];
 
@@ -91,9 +94,12 @@ void loop() {
         }
     }
     if (currentMillis - lastMotionTime >= led_interval) {
-        digitalWrite(ledPin, 0); // Turn OFF LED
-        snprintf(msg, MSG_BUFFER_SIZE, "OFF");
-        LED_A.publish(msg);
+      if (isSent = false) {
+          digitalWrite(ledPin, 0); // Turn OFF LED
+          snprintf(msg, MSG_BUFFER_SIZE, "OFF");
+          LED_A.publish(msg);
+          isSent = true;
+      }
     }
 
     // If motion is detected, blink the LED
@@ -108,6 +114,7 @@ void loop() {
         snprintf(msg, MSG_BUFFER_SIZE, "ON");
         LED_A.publish(msg);
         M5.Lcd.println("Sent ON");
+        isSent = false;
       } else {
         Serial.println("No motion detected."); // Log to Serial Monitor
       }
