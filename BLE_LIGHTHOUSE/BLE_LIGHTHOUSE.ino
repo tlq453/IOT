@@ -88,6 +88,7 @@ void setup() {
 }
 
 void loop() {
+  unsigned long now = millis()
   M5.update();
     static unsigned long lastNotificationTime = 0;
     const unsigned long notificationInterval = 1000; // 1 seconds
@@ -96,7 +97,7 @@ void loop() {
     bool currentMotion = digitalRead(pirPin);
     
     // Update motion state if changed or time interval elapsed
-    if (currentMotion != motionDetected || millis() - lastNotificationTime >= notificationInterval) {
+    if (currentMotion != motionDetected && (millis() - lastNotificationTime >= notificationInterval)) {
         motionDetected = currentMotion;
         uint8_t motionState = motionDetected ? 1 : 0;
         pMotionChar->setValue(&motionState, 1);
