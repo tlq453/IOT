@@ -3,27 +3,69 @@ from bleak import BleakScanner, BleakClient
 
 # UUIDs (must match M5StickCPlus firmware)
 SERVICE_UUID = "35e65a71-b2d6-43f7-b3be-719ce5744884"  # M5StickCPlus service
+MOTION_STATE_UUID= "36bd104c-a23f-4dcf-b808-a1bc4516314e"
 LIGHT_STATE_UUID = "c033e6dc-1355-4935-abb1-6e46b1a84c36"  # LED state characteristic
 
 # Track connected devices
 connected_devices = {}
+max_connected_devices = 2  # Set a limit for connected devices
 
-def notification_handler(sender, data, device_name):
-    """Callback when M5StickCPlus sends LED state updates."""
+def notification_handler(sender, data, device):
+    """Callback when M5StickCPlus sends Motion state updates."""
     state = int.from_bytes(data, byteorder="little")
-    print(f"📢 {device_name}: LED {'ON' if state else 'OFF'}")
+    print(f"📢 {device.name}: Motion {'DETECTED' if state else 'NO MOTION'}")
+    # Find the device by address instead of name
+    # Find the device by address (which we know is device.address)
+    for addr, device_info in connected_devices.items():
+        # Skip the device that sent the motion notification if desired
+        # if addr == device.address:
+        #     continue
+        
+        asyncio.create_task(
+            write_to_device(
+                device_info["client"],
+                "ON" if state else "OFF"  # Send proper command
+            )
+        )
+    else:
+        print(f"⚠️ Device {device.address} not found in connected_devices")
 
 async def connect_to_device(device, max_retries=3):
     retry_count = 0
     while retry_count < max_retries:
         try:
-            async with BleakClient(device, timeout=20.0) as client:  # Increased timeout
+            async with BleakClient(device, timeout=30.0) as client:  # Increased timeout to 30s
                 print(f"✅ Connected to {device.name}")
-                await client.start_notify(
-                    LIGHT_STATE_UUID,
-                     lambda s, d: notification_handler(s, d, device.name)
-                    )
-                connected_devices[device.address] = client
+
+                # Add small delay for connection stabilization
+                await asyncio.sleep(0.5)
+
+                # Verify services exist first
+                try:
+                    services = await client.get_services()
+                    has_motion = MOTION_STATE_UUID.lower() in {str(c.uuid).lower() for s in services for c in s.characteristics}
+                    
+                    # Only subscribe if motion characteristic exists
+                    if has_motion:
+                        await client.start_notify(
+                            MOTION_STATE_UUID,
+                            lambda s, d: notification_handler(s, d, device)
+                        )
+                        print(f"🔔 Subscribed to motion notifications")
+                    else:
+                        print(f"ℹ️ No motion characteristic found (LED-only device)")
+                except Exception as e:
+                    print(f"⚠️ Service discovery failed: {str(e)}")
+                    raise
+
+                # Light State Modifier
+                connected_devices[device.address] = {
+                    "client": client,
+                    "light_state": LIGHT_STATE_UUID,
+                    "name": device.name,
+                    "has_motion": has_motion  # Track if device has motion capability
+                }
+                print(f"📋 Connected devices ({len(connected_devices)}): {[d['name'] for d in connected_devices.values()]}")
                 
                 while client.is_connected:
                     await asyncio.sleep(1)
@@ -36,52 +78,30 @@ async def connect_to_device(device, max_retries=3):
     
     print(f"❌ Max retries reached for {device.address}")
 
-# async def main():
-#     global connected_devices
-
-#     while True:
-#         if not connected_devices:
-#             print("🔍 Scanning for M5StickCPlus devices...")
-#             devices = await BleakScanner.discover(
-#                 timeout=10.0,
-#                 detection_callback=lambda d, _: print(f"Found: {d.name}"),
-#                 scanning_mode="active",
-#                 adapter="hci0"
-#             )
-            
-#             # Manual UUID filtering
-#             valid_devices = [
-#                 d for d in devices 
-#                 if SERVICE_UUID.lower() in d.metadata.get("uuids", [])
-#             ]
-            
-#             if not valid_devices:
-#                 print("🚫 No valid devices found. Retrying...")
-#                 await asyncio.sleep(5)
-#                 continue
-            
-#             # Connect to first valid device
-#             asyncio.create_task(connect_to_device(valid_devices[0]))
-        
-#         # Just wait for notifications if connected
-#         else:
-#             # Check if any devices are still connected
-#             for addr, client in list(connected_devices.items()):
-#                 if not client.is_connected:
-#                     del connected_devices[addr]
-#                     print(f"♻️ Disconnected: {addr}")
-            
-#             await asyncio.sleep(1)  # Short sleep to prevent CPU overload
+async def write_to_device(client, message):
+    """Write data to a connected device"""
+    try:
+        if client.is_connected:
+            byte_to_send = b'\x01' if message == "ON" else b'\x00'
+            await client.write_gatt_char(LIGHT_STATE_UUID, byte_to_send)
+            print(f"📤 Sent to {client}: {message}")
+            return True
+        else:
+            print(f"⚠️ Device {client.address} not connected")
+            return False
+    except Exception as e:
+        print(f"⚠️ Write failed to {client.address}: {str(e)}")
+        return False
 
 async def main():
     global connected_devices
     scanner = None
+    global max_connected_devices
     
     while True:
-        if not connected_devices:
-            print("🔍 Starting new scan for devices...")
+        if len(connected_devices) < max_connected_devices:
+            print("🔍 Scanning for devices...")
             try:
-                # Start scanner with our callback
                 scanner = BleakScanner(
                     detection_callback=lambda d, _: (
                         SERVICE_UUID.lower() in d.metadata.get("uuids", [])
@@ -90,35 +110,36 @@ async def main():
                 )
                 await scanner.start()
 
-                # Wait until we find our device
-                found_device = None
-                while not found_device and not connected_devices:
+                # Continuous scanning until max reached
+                while len(connected_devices) < max_connected_devices:
                     devices = await scanner.get_discovered_devices()
-                    valid_devices = [d for d in devices if SERVICE_UUID.lower() in d.metadata.get("uuids", [])]
-                    
-                    if valid_devices:
-                        found_device = valid_devices[0]
-                        print(f"⚡ Found target device: {found_device.name}")
-                        # Immediately attempt connection
-                        await connect_to_device(found_device)
-                    
-                    await asyncio.sleep(0.1)
+                    new_devices = [
+                        d for d in devices 
+                        if SERVICE_UUID.lower() in d.metadata.get("uuids", []) 
+                        and d.address not in connected_devices
+                    ]
+
+                    for device in new_devices:
+                        if len(connected_devices) >= max_connected_devices:
+                            break
+                        print(f"⚡ Found: {device.name}")
+                        # Non-blocking connection attempt
+                        asyncio.create_task(connect_to_device(device))
+
+                    await asyncio.sleep(1)  # Short interval between scans
 
             except Exception as e:
                 print(f"⚠️ Scan error: {str(e)}")
             finally:
                 if scanner:
                     await scanner.stop()
-                    scanner = None
-                    print("🛑 Scanning completely stopped")
         
         else:
-            # Connected maintenance mode - no scanning happens here
-            for addr, client in list(connected_devices.items()):
-                if not client.is_connected:
+            # Maintain existing connections
+            for addr, info in list(connected_devices.items()):
+                if not info["client"].is_connected:
                     del connected_devices[addr]
-                    print(f"♻️ Device disconnected: {addr}")
-                    break  # Exit maintenance mode
+                    print(f"♻️ Disconnected: {addr}")
             
             await asyncio.sleep(1)
 
