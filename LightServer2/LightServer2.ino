@@ -72,26 +72,27 @@ class MyServerCallbacks : public BLEServerCallbacks {
 
 class LEDCharacteristicCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* pCharacteristic) {
-    std::string value = pCharacteristic->getValue();
-    if (value == "1") {
-      digitalWrite(25, HIGH);
-      Serial.println("LED turned ON");
+    Serial.println("[DEBUG] onWrite triggered on AdjacentNode");
 
-      // Display on LCD
+    std::string value = pCharacteristic->getValue();
+    Serial.printf("[DEBUG] Received value: %s\n", value.c_str());
+
+    if (value == "1") {
+      digitalWrite(LED_PIN, HIGH);
+      Serial.println("LED turned ON");
       M5.Lcd.fillRect(0, 50, 160, 20, BLACK);
       M5.Lcd.setCursor(0, 50, 2);
       M5.Lcd.printf("LED is ON");
 
     } else {
-      digitalWrite(25, LOW);
+      digitalWrite(LED_PIN, LOW);
       Serial.println("LED turned OFF");
-
-      // Display on LCD
       M5.Lcd.fillRect(0, 50, 160, 20, BLACK);
       M5.Lcd.setCursor(0, 50, 2);
       M5.Lcd.printf("LED is OFF");
     }
   }
+
 };
 
 // ====== BLE Setup ======
@@ -111,6 +112,7 @@ void setupBLE() {
   lightStateChar.setCallbacks(new LEDCharacteristicCallbacks());
 
   service->start();
+  delay(200);
 
   BLEAdvertising *advertising = pServer->getAdvertising();  // <- get from your server
   advertising->addServiceUUID(SERVICE_UUID);
