@@ -5,10 +5,9 @@
 // ====== Pin and BLE Definitions ======
 #define LED_PIN 25
 #define PIR_PIN 26
-#define M5LED_PIN 10 // M5 LED pin (GPIO 10)
-#define BLE_SERVER_NAME "LightNode1"
+#define BLE_SERVER_NAME "LightNode3"
 
-#define SERVICE_UUID       "da1a59b9-1125-4bd4-b72b-d15dc8057c53"
+#define SERVICE_UUID       "da2a59b9-1125-4bd4-b72b-d15dc8057c53"
 #define LIGHT_NAME_UUID    "11111111-1111-1111-1111-111111111111"
 #define LIGHT_STATE_UUID   "22222222-2222-2222-2222-222222222222"
 #define PROTOCOL_UUID      "33333333-3333-3333-3333-333333333333"
@@ -66,17 +65,30 @@ class MyServerCallbacks : public BLEServerCallbacks {
   void onDisconnect(BLEServer* pServer) {
     deviceConnected = false;
     Serial.println("BLE disconnected - restarting advertising");
-    pServer->getAdvertising()->start();
+    BLEDevice::startAdvertising();
   }
 };
 
 class LEDCharacteristicCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *pCharacteristic) {
+  void onWrite(BLECharacteristic* pCharacteristic) {
     std::string value = pCharacteristic->getValue();
     if (value == "1") {
-      turnOnLED();
-    } else if (value == "0") {
-      turnOffLED();
+      digitalWrite(25, HIGH);
+      Serial.println("LED turned ON");
+
+      // Display on LCD
+      M5.Lcd.fillRect(0, 50, 160, 20, BLACK);
+      M5.Lcd.setCursor(0, 50, 2);
+      M5.Lcd.printf("LED is ON");
+
+    } else {
+      digitalWrite(25, LOW);
+      Serial.println("LED turned OFF");
+
+      // Display on LCD
+      M5.Lcd.fillRect(0, 50, 160, 20, BLACK);
+      M5.Lcd.setCursor(0, 50, 2);
+      M5.Lcd.printf("LED is OFF");
     }
   }
 };
@@ -89,7 +101,7 @@ void setupBLE() {
 
   BLEService *service = pServer->createService(SERVICE_UUID);
 
-  lightNameChar.setValue("LightNode 1");
+  lightNameChar.setValue("LightNode 3");
   protocolChar.setValue("BLE");
 
   service->addCharacteristic(&lightNameChar);
@@ -99,7 +111,7 @@ void setupBLE() {
 
   service->start();
 
-  BLEAdvertising *advertising = pServer->getAdvertising();  // <- get from your server
+  BLEAdvertising *advertising = BLEDevice::getAdvertising();
   advertising->addServiceUUID(SERVICE_UUID);
   advertising->start();
 
@@ -112,17 +124,13 @@ void setup() {
   Serial.begin(115200);
 
   pinMode(LED_PIN, OUTPUT);
-
-  pinMode(M5LED_PIN, OUTPUT);
-  digitalWrite(M5LED_PIN,HIGH);
-
   digitalWrite(LED_PIN, LOW); // Start with LED OFF
 
   pinMode(PIR_PIN, INPUT);    // Motion sensor
   M5.Lcd.setRotation(3);
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setCursor(0, 0, 2);
-  M5.Lcd.println("Light Node");
+  M5.Lcd.println("Light Node 3");
 
   setupBLE();
 }
@@ -132,26 +140,13 @@ void loop() {
   unsigned long now = millis();
 
   if (deviceConnected) {
-    // Motion check
-    if (now - lastMotionCheck >= motionCheckInterval) {
-      lastMotionCheck = now;
-
-      if (motionDetected()) {
-        Serial.println("Motion detected!");
-        turnOnLED(); // This resets the auto-off timer and adjusts interval
-      } else {
-        // If no motion after interval, resume fast polling
-        if (motionCheckInterval > 1000) {
-          motionCheckInterval = 1000;
-          Serial.println("Motion check interval reset to 1s");
-        }
-      }
-    }
-
+    Serial.println("in device connected loop");
     // Auto turn-off check
     if (ledOffTime > 0 && now >= ledOffTime) {
       Serial.println("Auto-off: LED turned OFF after 5 minutes");
       turnOffLED();
     }
   }
+
+  delay(1000);
 }
