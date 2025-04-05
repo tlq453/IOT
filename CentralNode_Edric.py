@@ -133,7 +133,7 @@ async def main():
                 await scanner.start()
 
                 # Continuous scanning until max reached
-                while len(connected_devices) < max_connected_devices:
+                while len(connected_devices) == max_connected_devices:
                     devices = await scanner.get_discovered_devices()
                     new_devices = [
                         d
@@ -142,12 +142,12 @@ async def main():
                         and d.address not in connected_devices
                     ]
 
-                    for device in new_devices:
-                        if len(connected_devices) >= max_connected_devices:
-                            break
-                        print(f"⚡ Found: {device.name}")
-                        # Non-blocking connection attempt
-                        asyncio.create_task(connect_to_device(device))
+                for device in new_devices:
+                    if len(connected_devices) >= max_connected_devices:
+                        break
+                    print(f"⚡ Found: {device.name}")
+                    # Non-blocking connection attempt
+                    asyncio.create_task(connect_to_device(device))
 
                     await asyncio.sleep(1)  # Short interval between scans
 
