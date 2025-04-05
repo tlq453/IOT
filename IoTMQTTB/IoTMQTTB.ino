@@ -8,9 +8,9 @@ const int pirPin = 26; // PIR sensor SIG pin connected to GPIO 26
 const int ledPin = 10; // LED connected to GPIO 33
 
 // WiFi and MQTT settings
-const char* ssid = R"(Sim’s iPhone)";
-const char* password = "a1234567";
-const char* mqtt_server = "172.20.10.2";
+const char* ssid = "justsomething";
+const char* password = "justajeffy";
+const char* mqtt_server = "192.168.20.33";
 
 // WiFi and MQTT Client setup
 WiFiClient wifiClient;
@@ -70,7 +70,7 @@ void loop() {
     while ((subscription = mqtt.readSubscription(10))) {
       if (subscription == &PIR_A) {
         char* message = (char *) PIR_A.lastread;
-        if (strcmp(message, "ON") == 0) {
+        if (strcmp(message, "1") == 0) {
           lastMotionTime = currentMillis;
           digitalWrite(ledPin, 0);
           snprintf(msg, MSG_BUFFER_SIZE, "1");
