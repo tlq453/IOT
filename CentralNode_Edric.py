@@ -3,24 +3,19 @@ from bleak import BleakScanner, BleakClient
 
 # UUIDs (must match M5StickCPlus firmware)
 SERVICE_UUID = "35e65a71-b2d6-43f7-b3be-719ce5744884"  # M5StickCPlus service
-MOTION_STATE_UUID= "36bd104c-a23f-4dcf-b808-a1bc4516314e"
+MOTION_STATE_UUID = "36bd104c-a23f-4dcf-b808-a1bc4516314e"
 LIGHT_STATE_UUID = "c033e6dc-1355-4935-abb1-6e46b1a84c36"  # LED state characteristic
 
 # Track connected devices
 connected_devices = {}
-max_connected_devices = 2  # Set a limit for connected devices
+max_connected_devices = 3  # Set a limit for connected devices
 
-def notification_handler(sender, data, device):
+def motion_notification_handler(sender, data, device):
     """Callback when M5StickCPlus sends Motion state updates."""
     state = int.from_bytes(data, byteorder="little")
     print(f"📢 {device.name}: Motion {'DETECTED' if state else 'NO MOTION'}")
-    # Find the device by address instead of name
     # Find the device by address (which we know is device.address)
     for addr, device_info in connected_devices.items():
-        # Skip the device that sent the motion notification if desired
-        # if addr == device.address:
-        #     continue
-        
         asyncio.create_task(
             write_to_device(
                 device_info["client"],
@@ -29,6 +24,11 @@ def notification_handler(sender, data, device):
         )
     else:
         print(f"⚠️ Device {device.address} not found in connected_devices")
+
+def led_notification_handler(sender, data, device):
+    """Callback when M5StickCPlus sends LED state updates."""
+    state = int.from_bytes(data, byteorder="little")
+    print(f"💡 {device.name}: LED {'ON' if state else 'OFF'}")
 
 async def connect_to_device(device, max_retries=3):
     retry_count = 0
@@ -44,26 +44,34 @@ async def connect_to_device(device, max_retries=3):
                 try:
                     services = await client.get_services()
                     has_motion = MOTION_STATE_UUID.lower() in {str(c.uuid).lower() for s in services for c in s.characteristics}
+                    has_led = LIGHT_STATE_UUID.lower() in {str(c.uuid).lower() for s in services for c in s.characteristics}
                     
-                    # Only subscribe if motion characteristic exists
+                    # Subscribe to notifications if characteristics exist
                     if has_motion:
                         await client.start_notify(
                             MOTION_STATE_UUID,
-                            lambda s, d: notification_handler(s, d, device)
+                            lambda s, d: motion_notification_handler(s, d, device)
                         )
                         print(f"🔔 Subscribed to motion notifications")
-                    else:
-                        print(f"ℹ️ No motion characteristic found (LED-only device)")
+                    
+                    if has_led:
+                        await client.start_notify(
+                            LIGHT_STATE_UUID,
+                            lambda s, d: led_notification_handler(s, d, device)
+                        )
+                        print(f"💡 Subscribed to LED state notifications")
+                    
                 except Exception as e:
                     print(f"⚠️ Service discovery failed: {str(e)}")
                     raise
 
-                # Light State Modifier
+                # Store device info
                 connected_devices[device.address] = {
                     "client": client,
                     "light_state": LIGHT_STATE_UUID,
                     "name": device.name,
-                    "has_motion": has_motion  # Track if device has motion capability
+                    "has_motion": has_motion,
+                    "has_led": has_led
                 }
                 print(f"📋 Connected devices ({len(connected_devices)}): {[d['name'] for d in connected_devices.values()]}")
                 
