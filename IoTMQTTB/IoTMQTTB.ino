@@ -70,7 +70,7 @@ void loop() {
     while ((subscription = mqtt.readSubscription(10))) {
       if (subscription == &PIR_A) {
         char* message = (char *) PIR_A.lastread;
-        if (strcmp(message, "ON") == 0) {
+        if (strcmp(message, "1") == 0) {
           lastMotionTime = currentMillis;
           digitalWrite(ledPin, 0);
           snprintf(msg, MSG_BUFFER_SIZE, "1");
