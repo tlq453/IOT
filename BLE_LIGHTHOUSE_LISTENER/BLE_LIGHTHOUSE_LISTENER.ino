@@ -26,8 +26,9 @@ class LedCallback : public BLECharacteristicCallbacks {
             digitalWrite(ledPin, ledOn ? HIGH : LOW);
             Serial.printf("LED set to: %s\n", ledOn ? "ON" : "OFF");
             
-            // Update the characteristic value
+            // Update the characteristic value and notify
             pLedChar->setValue(&ledState, 1);
+            pLedChar->notify();  // Added notification
         }
     }
 };
@@ -49,11 +50,12 @@ void setup() {
   pServer = BLEDevice::createServer();
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
-  // LED State Characteristic
+  // LED State Characteristic - Added NOTIFY property
   pLedChar = pService->createCharacteristic(
       LED_STATE_CHAR_UUID,
       BLECharacteristic::PROPERTY_READ |
-      BLECharacteristic::PROPERTY_WRITE
+      BLECharacteristic::PROPERTY_WRITE |
+      BLECharacteristic::PROPERTY_NOTIFY  // Added this
   );
   pLedChar->addDescriptor(new BLE2902());
   pLedChar->setCallbacks(new LedCallback());
@@ -77,6 +79,7 @@ void loop() {
     
     uint8_t ledState = ledOn ? 1 : 0;
     pLedChar->setValue(&ledState, 1);
+    pLedChar->notify();  // Added notification
     
     M5.Lcd.printf("LED: %s\n", ledOn ? "ON" : "OFF");
   }
