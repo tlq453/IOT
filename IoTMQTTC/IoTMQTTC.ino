@@ -59,7 +59,7 @@ void loop() {
     if (currentMillis - lastMotionTime >= led_interval) {
       if (isSent == false) {
         digitalWrite(ledPin, 1); // Turn OFF LED
-        snprintf(msg, MSG_BUFFER_SIZE, "OFF");
+        snprintf(msg, MSG_BUFFER_SIZE, "0");
         LED_C.publish(msg);
         isSent = true;
       }
@@ -73,7 +73,7 @@ void loop() {
         if (strcmp(message, "ON") == 0) {
           lastMotionTime = currentMillis;
           digitalWrite(ledPin, 0);
-          snprintf(msg, MSG_BUFFER_SIZE, "C is ON");
+          snprintf(msg, MSG_BUFFER_SIZE, "1");
           LED_C.publish(msg);
           M5.Lcd.println("Sent ON");
           isSent = false;

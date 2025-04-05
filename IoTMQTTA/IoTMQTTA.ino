@@ -96,7 +96,7 @@ void loop() {
     if (currentMillis - lastMotionTime >= led_interval) {
       if (isSent = false) {
           digitalWrite(ledPin, 0); // Turn OFF LED
-          snprintf(msg, MSG_BUFFER_SIZE, "OFF");
+          snprintf(msg, MSG_BUFFER_SIZE, "0");
           LED_A.publish(msg);
           isSent = true;
       }
@@ -108,10 +108,10 @@ void loop() {
         Serial.println("Motion detected!"); // Log to Serial Monitor
         lastMotionTime = currentMillis;
         cooldownMotion = true;
-        snprintf(msg, MSG_BUFFER_SIZE, "ON");
+        snprintf(msg, MSG_BUFFER_SIZE, "1");
         PIR_A.publish(msg);
         digitalWrite(ledPin, 1); // Turn on the LED
-        snprintf(msg, MSG_BUFFER_SIZE, "ON");
+        snprintf(msg, MSG_BUFFER_SIZE, "1");
         LED_A.publish(msg);
         M5.Lcd.println("Sent ON");
         isSent = false;
