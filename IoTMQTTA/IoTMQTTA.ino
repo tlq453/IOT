@@ -8,7 +8,7 @@ const int pirPin = 26; // PIR sensor SIG pin connected to GPIO 26
 const int ledPin = 25; // LED connected to GPIO 33
 
 // WiFi and MQTT settings
-const char* ssid = "Sim's iPhone";
+const char* ssid = R"(Sim’s iPhone)";
 const char* password = "a1234567";
 const char* mqtt_server = "172.20.10.2";
 
