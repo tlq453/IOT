@@ -10,7 +10,7 @@ const int ledPin = 25; // LED connected to GPIO 33
 // WiFi and MQTT settings
 const char* ssid = "justsomething";
 const char* password = "justajeffy";
-const char* mqtt_server = "192.168.20.33";
+const char* mqtt_server = "192.168.20.213";
 
 // WiFi and MQTT Client setup
 WiFiClient wifiClient;
@@ -23,8 +23,10 @@ Adafruit_MQTT_Publish LED_A = Adafruit_MQTT_Publish(&mqtt, "building/rooms/A/LED
 // Timer variables
 unsigned long lastMotionTime = 0;
 bool cooldownMotion = false;
-unsigned long timer_interval = 240000;
-unsigned long led_interval = 300000;
+// unsigned long timer_interval = 240000;
+// unsigned long led_interval = 300000;
+unsigned long timer_interval = 4000;
+unsigned long led_interval = 5000;
 
 // ledState isSent
 bool isSent = false;
@@ -94,7 +96,7 @@ void loop() {
         }
     }
     if (currentMillis - lastMotionTime >= led_interval) {
-      if (isSent = false) {
+      if (isSent == false) {
           digitalWrite(ledPin, 0); // Turn OFF LED
           snprintf(msg, MSG_BUFFER_SIZE, "0");
           LED_A.publish(msg);
