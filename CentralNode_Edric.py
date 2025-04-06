@@ -132,6 +132,7 @@ async def main():
                 )
                 await scanner.start()
 
+                test_connected_device = []
                 # Continuous scanning until max reached
                 while len(connected_devices) < max_connected_devices:
                     devices = await scanner.get_discovered_devices()
@@ -147,7 +148,9 @@ async def main():
                             break
                         print(f"⚡ Found: {device.name}")
                         # Non-blocking connection attempt
-                        asyncio.create_task(connect_to_device(device))
+                        if device.name not in test_connected_device:
+                            test_connected_device.append(device.name)
+                            asyncio.create_task(connect_to_device(device))
 
                     await asyncio.sleep(1)  # Short interval between scans
 
