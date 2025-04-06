@@ -3,7 +3,6 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include <mbedtls/aes.h>
 
 #define SERVICE_UUID        "35e65a71-b2d6-43f7-b3be-719ce5744884"
 #define MOTION_STATE_CHAR_UUID     "36bd104c-a23f-4dcf-b808-a1bc4516314e"
@@ -88,8 +87,7 @@ void setup() {
 }
 
 void loop() {
-  unsigned long now = millis()
-  M5.update();
+    M5.update();
     static unsigned long lastNotificationTime = 0;
     const unsigned long notificationInterval = 1000; // 1 seconds
     
