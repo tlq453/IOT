@@ -38,9 +38,9 @@ def on_message(client, userdata, msg):
         topic = msg.topic
         payload = msg.payload.decode()
         total_packet_size = estimate_packet_size(msg)
+        print(f"Packet Size: {total_packet_size}")
 
         print(f"Topic: [{topic}] Payload: {payload}")
-        print(f"Packet Size: {total_packet_size}")
 
         topic_level = topic.split("/")[-2]
         print(f"Topic Level: {topic_level}")
@@ -63,6 +63,14 @@ def estimate_packet_size(msg):
     fixed_header = 2  # Typically 2 bytes for small messages
     topic_header = 2 + topic_length  # 2 bytes for topic length field
     packet_id = 2 if msg.qos > 0 else 0
+
+    print(
+        f"\nTopic Length: {topic_length}, "
+        f"payload_length: {payload_length}, "
+        f"fixed_header: {fixed_header}, "
+        f"topic_header: {topic_header}, "
+        f"packet_id: {packet_id}"
+    )
 
     return fixed_header + topic_header + packet_id + payload_length
 
