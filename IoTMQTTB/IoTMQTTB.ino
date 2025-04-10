@@ -5,7 +5,7 @@
 
 // Define pins
 const int pirPin = 26; // PIR sensor SIG pin connected to GPIO 26
-const int ledPin = 10; // LED connected to GPIO 33
+const int ledPin = 25; // LED connected to GPIO 33
 
 // WiFi and MQTT settings
 const char* ssid = R"(Sim’s iPhone)";
@@ -44,7 +44,7 @@ void setup() {
 
     // Setup LED
     pinMode(ledPin, OUTPUT);
-    digitalWrite(ledPin, 1);
+    digitalWrite(ledPin, 0);
 }
 
 void loop() {
@@ -59,7 +59,7 @@ void loop() {
     unsigned long currentMillis = millis();
     if (currentMillis - lastMotionTime >= led_interval) {
         if (isSent == false) {
-          digitalWrite(ledPin, 1); // Turn OFF LED
+          digitalWrite(ledPin, 0); // Turn OFF LED
           snprintf(msg, MSG_BUFFER_SIZE, "0");
           LED_B.publish(msg);
           isSent = true;
@@ -73,7 +73,7 @@ void loop() {
         char* message = (char *) PIR_A.lastread;
         if (strcmp(message, "1") == 0) {
           lastMotionTime = currentMillis;
-          digitalWrite(ledPin, 0);
+          digitalWrite(ledPin, 1);
           snprintf(msg, MSG_BUFFER_SIZE, "1");
           LED_B.publish(msg);
           M5.Lcd.println("Sent ON");
